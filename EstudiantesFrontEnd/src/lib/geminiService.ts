@@ -1176,7 +1176,7 @@ Si deseas repasar otro tema, dime el numero o el nombre.`);
     fallbackLines.push(generateStudyLinks(subtopicTitle || option.tema, materiaName));
     fallbackLines.push('');
     fallbackLines.push('Si deseas repasar otro tema, dime el numero o el nombre.');
-
+tatu
     return this.formatResponse(fallbackLines.join('\n'));
   }
 
