@@ -9,6 +9,10 @@ router.register(r'inscripcion', InscripcionViewSet, basename='inscripcion')
 router.register(r'nivel', NivelViewSet, basename='nivel')
 router.register(r'paralelo', ParaleloViewSet, basename='paralelo')
 router.register(r'materia', MateriaViewSet, basename='materia')
+router.register(r'periodo-academico', PeriodoAcademicoViewSet, basename='periodo-academico')
+router.register(r'silabo', SilaboViewSet, basename='silabo')
+router.register(r'tema', TemaViewSet, basename='tema')
+router.register(r'subtema', SubtemaViewSet, basename='subtema')
 
 urlpatterns = [
     path('register/', RegisterEstudianteView.as_view(), name='register_estudiante'),
@@ -18,3 +22,4 @@ urlpatterns = [
 ]
 
 urlpatterns += router.urls
+

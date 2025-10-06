@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,7 +30,7 @@ SECRET_KEY = 'django-insecure-f(@00&in=fzvh1o&8f*fw18gbpxinkk=jf$gthudbym&yk$$oz
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0', '127.0.0.1:8000', 'localhost:8000']
 
 
 # Application definition
@@ -146,8 +147,28 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:3000",
 ]
+
+# Configuración adicional de CORS
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = True  # Solo para desarrollo
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 AUTH_USER_MODEL = 'AppEstudiante.Estudiante'
 SIMPLE_JWT = {
     'USER_ID_FIELD': 'id_Estudiante',  # <- tu campo PK real
     'USER_ID_CLAIM': 'user_id',        # nombre del claim en el token
+    'USERNAME_FIELD': 'nombre',        # <- Campo de usuario para login
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),      # 24 horas
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),       # 7 días
+    'ROTATE_REFRESH_TOKENS': True,                     # Renovar refresh token
+    'BLACKLIST_AFTER_ROTATION': True,                  # Invalidar tokens antiguos
 }

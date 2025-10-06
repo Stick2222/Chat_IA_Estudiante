@@ -120,3 +120,23 @@ class ParaleloViewSet(viewsets.ModelViewSet):
 class MateriaViewSet(viewsets.ModelViewSet):
     queryset = Materia.objects.all()
     serializer_class = MateriaSerializer
+
+class PeriodoAcademicoViewSet(viewsets.ModelViewSet):
+    queryset = PeriodoAcademico.objects.all()
+    serializer_class = PeriodoAcademicoSerializer
+
+
+class SilaboViewSet(viewsets.ModelViewSet):
+    queryset = Silabo.objects.select_related('id_Materia', 'periodo', 'id_Paralelo').prefetch_related('temas__subtemas')
+    serializer_class = SilaboSerializer
+
+
+class TemaViewSet(viewsets.ModelViewSet):
+    queryset = Tema.objects.select_related('id_Silabo').prefetch_related('subtemas')
+    serializer_class = TemaSerializer
+
+
+class SubtemaViewSet(viewsets.ModelViewSet):
+    queryset = Subtema.objects.select_related('id_Tema')
+    serializer_class = SubtemaSerializer
+

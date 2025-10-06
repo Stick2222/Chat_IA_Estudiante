@@ -1,0 +1,4 @@
+@import "tailwindcss";
+.nextjs-build-indicator {
+  display: none !important;
+}
