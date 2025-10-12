@@ -298,7 +298,7 @@ export default function ChatbotPage() {
                     <div className={`flex-shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg ${
                       message.isUser 
                         ? 'bg-gradient-to-br from-indigo-500 to-purple-600' 
-                        : 'bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600'
+                        : 'bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 text-white rounded-tl-sm'
                     }`}>
                       {message.isUser ? (
                         <User className="w-5 h-5 text-white" />

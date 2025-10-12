@@ -1,11 +1,16 @@
-
-/// lib/openaiService.ts - VERSIÓN CON FUNCTION CALLING Y BÚSQUEDA WEB
-import OpenAI from 'openai';
-import { UserContext } from '../app/types/chatbot';
+// lib/openaiService.ts - VERSIÓN CON FUNCTION CALLING, SÍLABO Y ENLACES CLICABLES (LABEL)
+import OpenAI from "openai";
+import { UserContext } from "../app/types/chatbot";
 
 export class ChatbotService {
   private openai: OpenAI | null = null;
-  private chatHistory: Array<{role: 'system' | 'user' | 'assistant' | 'function', content: string, name?: string}> = [];
+  private chatHistory: Array<{
+    role: "system" | "user" | "assistant" | "function";
+    content: string;
+    name?: string;
+    // @ts-ignore: para almacenar function_call en historial si es necesario
+    function_call?: any;
+  }> = [];
   private useFallback: boolean = false;
   private lastImageHash: string | null = null;
 
@@ -15,21 +20,21 @@ export class ChatbotService {
 
   private initializeService(): void {
     const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-    
-    if (!apiKey || !apiKey.startsWith('sk-')) {
-      console.warn('❌ OpenAI API Key no válida');
+
+    if (!apiKey || !apiKey.startsWith("sk-")) {
+      console.warn("❌ OpenAI API Key no válida");
       this.useFallback = true;
       return;
     }
 
     try {
       this.openai = new OpenAI({
-        apiKey: apiKey,
-        dangerouslyAllowBrowser: true
+        apiKey,
+        dangerouslyAllowBrowser: true,
       });
-      console.log('✅ OpenAI inicializado');
+      console.log("✅ OpenAI inicializado");
     } catch (error) {
-      console.error('❌ Error inicializando OpenAI:', error);
+      console.error("❌ Error inicializando OpenAI:", error);
       this.useFallback = true;
     }
   }
@@ -38,122 +43,123 @@ export class ChatbotService {
     return `Eres "EduBot", un asistente educativo universitario experto y empático.
 
 DATOS DEL ESTUDIANTE:
-- Nombre: ${userContext?.nombre || 'Usuario'}
-- Sesión activa: ${userContext?.isLoggedIn ? 'Sí' : 'No'}
-- Fecha actual: ${new Date().toLocaleDateString('es-EC', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-- Hora actual: ${new Date().toLocaleTimeString('es-EC')}
+- Nombre: ${userContext?.nombre || "Usuario"}
+- Sesión activa: ${userContext?.isLoggedIn ? "Sí" : "No"}
+- Fecha actual: ${new Date().toLocaleDateString("es-EC", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+- Hora actual: ${new Date().toLocaleTimeString("es-EC")}
 
 INSTRUCCIONES CRÍTICAS:
-1. **Mantén el contexto**: Recuerda lo que el estudiante preguntó antes y responde en consecuencia
-2. **Sé conversacional**: Responde como un tutor amigable, no como un sistema automatizado
-3. **Usa las funciones**: Cuando el estudiante pida información académica, usa las funciones disponibles
-4. **Flujo de selección de temas**: 
-   - Si el estudiante pide ayuda con una materia, PRIMERO obtén el silabo con obtener_silabo_materia
-   - Muestra los temas disponibles y pregunta cuál quiere reforzar
-   - Luego busca recursos específicos para ese tema con buscar_recursos_estudio
-5. **Recomienda material**: Si detectas materias con calificación < 70, busca automáticamente recursos en internet
-6. **Sigue el hilo**: Si el estudiante hace preguntas relacionadas, conecta con lo anterior
+1. Mantén el contexto y responde como tutor amigable.
+2. Usa las funciones disponibles cuando corresponda.
+3. Flujo de refuerzo de temas:
+   - Si el estudiante pide ayuda en una materia, PRIMERO usa obtener_silabo_materia
+   - Muestra los temas disponibles y permite elegir
+   - Luego usa buscar_recursos_estudio para el tema/subtema elegido
+4. Recomienda material si detectas < 70 en cualquier materia.
+5. Conecta con lo conversado previamente.
 
-ESCALA DE CALIFICACIONES:
-- 90-100: Excelente 🏆
-- 80-89: Muy bueno ⭐
-- 70-79: Satisfactorio ✅
-- < 70: Necesita mejora urgente ⚠️
+ESCALA:
+- 90-100 Excelente 🏆
+- 80-89 Muy bueno ⭐
+- 70-79 Satisfactorio ✅
+- < 70 Mejora urgente ⚠️
 
-FUNCIONES DISPONIBLES:
-- obtener_calificaciones: Consulta las notas del estudiante
-- obtener_silabo_materia: Obtiene el silabo completo de una materia con todos sus temas y subtemas
-- buscar_recursos_estudio: Busca material educativo específico para una materia y tema concreto
+FORMATO ESPECIAL PARA ENLACES:
+- No escribas URLs sueltas.
+- Usa [LINK:url|Texto] o [LINK:url].
 
-ESTILO DE RESPUESTA:
-- Natural y conversacional
-- Empático pero honesto
-- Motivador cuando sea apropiado
-- Directo al punto sin ser robótico
-- Usa emojis solo cuando agreguen valor emocional`;
+FUNCIONES:
+- obtener_calificaciones
+- obtener_silabo_materia
+- buscar_recursos_estudio
+
+ESTILO:
+- Natural, directo, empático, con emojis solo si aportan.`;
   }
 
   // ===== DEFINICIÓN DE FUNCIONES PARA FUNCTION CALLING =====
-  
   private getFunctionDefinitions() {
     return [
       {
         name: "obtener_calificaciones",
-        description: "Obtiene las calificaciones y datos académicos del estudiante. Úsala cuando el estudiante pregunte sobre sus notas, materias, promedio, aulas, o cualquier información académica.",
+        description:
+          "Obtiene calificaciones y datos académicos del estudiante.",
         parameters: {
           type: "object",
           properties: {
             tipo_consulta: {
               type: "string",
-              enum: ["todas", "promedio", "mejor", "peor", "materias", "aulas", "especifica"],
-              description: "Tipo de consulta: todas las calificaciones, solo promedio, mejor nota, peor nota, lista de materias, información de aulas, o consulta específica de una materia"
+              enum: [
+                "todas",
+                "promedio",
+                "mejor",
+                "peor",
+                "materias",
+                "aulas",
+                "especifica",
+              ],
             },
-            materia_especifica: {
-              type: "string",
-              description: "Nombre de la materia si la consulta es específica (opcional)"
-            }
+            materia_especifica: { type: "string" },
           },
-          required: ["tipo_consulta"]
-        }
+          required: ["tipo_consulta"],
+        },
       },
       {
         name: "obtener_silabo_materia",
-        description: "Obtiene el silabo completo de una materia específica, incluyendo todos los temas y subtemas. Úsala cuando el estudiante quiera ver el contenido de una materia o necesite elegir un tema específico para reforzar.",
+        description:
+          "Obtiene el sílabo completo (temas y subtemas) de una materia.",
         parameters: {
           type: "object",
           properties: {
-            materia: {
-              type: "string",
-              description: "Nombre de la materia para consultar su silabo"
-            },
-            periodo: {
-              type: "string",
-              description: "Período académico (opcional, si no se especifica usa el período activo)"
-            }
+            materia: { type: "string" },
+            periodo: { type: "string" },
           },
-          required: ["materia"]
-        }
+          required: ["materia"],
+        },
       },
       {
         name: "buscar_recursos_estudio",
-        description: "Busca recursos educativos en internet para una materia específica y tema concreto. Úsala automáticamente cuando detectes que una materia tiene calificación menor a 70, o cuando el estudiante pida ayuda para mejorar un tema específico.",
+        description:
+          "Busca recursos para una materia/tema/subtema específicos.",
         parameters: {
           type: "object",
           properties: {
-            materia: {
-              type: "string",
-              description: "Nombre de la materia para la cual buscar recursos"
-            },
-            tema_especifico: {
-              type: "string",
-              description: "Tema específico del silabo que el estudiante quiere reforzar (opcional)"
-            },
-            subtema_especifico: {
-              type: "string",
-              description: "Subtema específico que el estudiante quiere reforzar (opcional)"
-            },
+            materia: { type: "string" },
+            tema_especifico: { type: "string" },
+            subtema_especifico: { type: "string" },
             tipo_recurso: {
               type: "string",
               enum: ["videos", "tutoriales", "ejercicios", "general"],
-              description: "Tipo de recurso educativo a buscar"
             },
             nivel_urgencia: {
               type: "string",
               enum: ["alta", "media", "baja"],
-              description: "Urgencia basada en la calificación: alta (< 60), media (60-69), baja (70+)"
-            }
+            },
           },
-          required: ["materia"]
-        }
-      }
+          required: ["materia"],
+        },
+      },
     ];
   }
 
-  // ===== IMPLEMENTACIÓN DE FUNCIONES =====
+  // ===== CONVERSIÓN DE [LINK:...] → <a href="...">Texto</a>
+  private makeLinksClickable(text: string): string {
+    if (!text) return text;
 
+    // Soporta [LINK:https://...|Texto visible] y [LINK:https://...]
+    return text.replace(
+      /\[LINK:(https?:\/\/[^\]\s\|]+)(?:\|([^\]]+))?\]/g,
+      (_m, url, label) =>
+        `<a href="${url}" target="_blank" rel="noopener noreferrer">${
+          label || "Enlace"
+        }</a>`
+    );
+  }
+
+  // ===== IMPLEMENTACIÓN DE FUNCIONES =====
   private async ejecutarFuncion(
-    functionName: string, 
-    functionArgs: any, 
+    functionName: string,
+    functionArgs: any,
     userContext?: UserContext
   ): Promise<string> {
     console.log(`🔧 Ejecutando función: ${functionName}`, functionArgs);
@@ -162,41 +168,48 @@ ESTILO DE RESPUESTA:
       switch (functionName) {
         case "obtener_calificaciones":
           return await this.obtenerCalificaciones(functionArgs, userContext);
-        
+
         case "obtener_silabo_materia":
           return await this.obtenerSilaboMateria(functionArgs, userContext);
-        
+
         case "buscar_recursos_estudio":
           return await this.buscarRecursosEstudio(functionArgs);
-        
+
         default:
           return JSON.stringify({ error: "Función no reconocida" });
       }
     } catch (error: any) {
       console.error(`❌ Error ejecutando ${functionName}:`, error);
-      return JSON.stringify({ 
-        error: "Error al ejecutar la función", 
-        detalles: error.message 
+      return JSON.stringify({
+        error: "Error al ejecutar la función",
+        detalles: error.message,
       });
     }
   }
 
-  private async obtenerCalificaciones(args: any, userContext?: UserContext): Promise<string> {
+  private async obtenerCalificaciones(
+    args: any,
+    userContext?: UserContext
+  ): Promise<string> {
     if (!userContext?.isLoggedIn || !userContext.token) {
-      return JSON.stringify({ 
+      return JSON.stringify({
         error: "No autenticado",
-        mensaje: "El estudiante debe iniciar sesión para consultar calificaciones"
+        mensaje:
+          "El estudiante debe iniciar sesión para consultar calificaciones",
       });
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/mis-inscripciones/`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${userContext.token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/mis-inscripciones/`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${userContext.token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Error HTTP: ${response.status}`);
@@ -207,48 +220,52 @@ ESTILO DE RESPUESTA:
       if (!Array.isArray(inscripciones) || inscripciones.length === 0) {
         return JSON.stringify({
           mensaje: "No se encontraron materias inscritas",
-          inscripciones: []
+          inscripciones: [],
         });
       }
 
-      // Procesar según tipo de consulta
       return this.procesarConsultaCalificaciones(inscripciones, args);
-
     } catch (error: any) {
-      return JSON.stringify({ 
-        error: "Error al obtener datos", 
-        mensaje: error.message 
+      return JSON.stringify({
+        error: "Error al obtener datos",
+        mensaje: error.message,
       });
     }
   }
 
-  private procesarConsultaCalificaciones(inscripciones: any[], args: any): string {
+  private procesarConsultaCalificaciones(
+    inscripciones: any[],
+    args: any
+  ): string {
     const tipo = args.tipo_consulta;
     const materiaEspecifica = args.materia_especifica?.toLowerCase();
 
-    // Filtrar inscripciones con calificación
-    const conNota = inscripciones.filter(i => i.calificacion !== null && i.calificacion !== undefined);
+    const conNota = inscripciones.filter(
+      (i) => i.calificacion !== null && i.calificacion !== undefined
+    );
 
     const resultado: any = {
       total_materias: inscripciones.length,
       materias_calificadas: conNota.length,
-      materias: []
+      materias: [],
     };
 
     switch (tipo) {
       case "todas":
-        resultado.materias = inscripciones.map(i => ({
+        resultado.materias = inscripciones.map((i) => ({
           nombre: i.paralelo?.materia?.nombre || "Materia desconocida",
           calificacion: i.calificacion,
           aula: i.paralelo?.aula || "No asignada",
           paralelo: i.paralelo?.numero_paralelo || "N/A",
-          carrera: i.carrera?.nombre || "N/A"
+          carrera: i.carrera?.nombre || "N/A",
         }));
         break;
 
       case "promedio":
         if (conNota.length > 0) {
-          const promedio = conNota.reduce((acc, i) => acc + i.calificacion, 0) / conNota.length;
+          const promedio =
+            conNota.reduce((acc, i) => acc + i.calificacion, 0) /
+            conNota.length;
           resultado.promedio = parseFloat(promedio.toFixed(2));
         } else {
           resultado.promedio = null;
@@ -258,27 +275,30 @@ ESTILO DE RESPUESTA:
 
       case "mejor":
         if (conNota.length > 0) {
-          const mejor = conNota.reduce((max, i) => i.calificacion > max.calificacion ? i : max);
+          const mejor = conNota.reduce((max, i) =>
+            i.calificacion > max.calificacion ? i : max
+          );
           resultado.mejor_materia = {
             nombre: mejor.paralelo?.materia?.nombre,
             calificacion: mejor.calificacion,
             aula: mejor.paralelo?.aula,
-            paralelo: mejor.paralelo?.numero_paralelo
+            paralelo: mejor.paralelo?.numero_paralelo,
           };
         }
         break;
 
       case "peor":
         if (conNota.length > 0) {
-          const peor = conNota.reduce((min, i) => i.calificacion < min.calificacion ? i : min);
+          const peor = conNota.reduce((min, i) =>
+            i.calificacion < min.calificacion ? i : min
+          );
           resultado.peor_materia = {
             nombre: peor.paralelo?.materia?.nombre,
             calificacion: peor.calificacion,
             aula: peor.paralelo?.aula,
-            paralelo: peor.paralelo?.numero_paralelo
+            paralelo: peor.paralelo?.numero_paralelo,
           };
-          
-          // ⭐ AUTO-TRIGGER: Si la peor nota es < 70, marcar para búsqueda de recursos
+
           if (peor.calificacion < 70) {
             resultado.necesita_recursos = true;
             resultado.materia_critica = peor.paralelo?.materia?.nombre;
@@ -288,17 +308,19 @@ ESTILO DE RESPUESTA:
 
       case "especifica":
         if (materiaEspecifica) {
-          const materiaEncontrada = inscripciones.find(i => 
-            i.paralelo?.materia?.nombre?.toLowerCase().includes(materiaEspecifica)
+          const materiaEncontrada = inscripciones.find((i) =>
+            i.paralelo?.materia?.nombre
+              ?.toLowerCase()
+              .includes(materiaEspecifica)
           );
-          
+
           if (materiaEncontrada) {
             resultado.materia = {
               nombre: materiaEncontrada.paralelo?.materia?.nombre,
               calificacion: materiaEncontrada.calificacion,
               aula: materiaEncontrada.paralelo?.aula,
               paralelo: materiaEncontrada.paralelo?.numero_paralelo,
-              carrera: materiaEncontrada.carrera?.nombre
+              carrera: materiaEncontrada.carrera?.nombre,
             };
           } else {
             resultado.error = `No se encontró la materia: ${materiaEspecifica}`;
@@ -308,32 +330,34 @@ ESTILO DE RESPUESTA:
 
       case "materias":
       case "aulas":
-        resultado.materias = inscripciones.map(i => ({
+        resultado.materias = inscripciones.map((i) => ({
           nombre: i.paralelo?.materia?.nombre || "Materia desconocida",
           aula: i.paralelo?.aula || "No asignada",
           paralelo: i.paralelo?.numero_paralelo || "N/A",
-          calificacion: i.calificacion
+          calificacion: i.calificacion,
         }));
         break;
     }
 
-    // Detectar materias críticas automáticamente
-    const materiasCriticas = conNota.filter(i => i.calificacion < 70);
+    const materiasCriticas = conNota.filter((i) => i.calificacion < 70);
     if (materiasCriticas.length > 0) {
-      resultado.materias_necesitan_atencion = materiasCriticas.map(i => ({
+      resultado.materias_necesitan_atencion = materiasCriticas.map((i) => ({
         nombre: i.paralelo?.materia?.nombre,
-        calificacion: i.calificacion
+        calificacion: i.calificacion,
       }));
     }
 
     return JSON.stringify(resultado);
   }
 
-  private async obtenerSilaboMateria(args: any, userContext?: UserContext): Promise<string> {
+  private async obtenerSilaboMateria(
+    args: any,
+    userContext?: UserContext
+  ): Promise<string> {
     if (!userContext?.isLoggedIn || !userContext.token) {
-      return JSON.stringify({ 
+      return JSON.stringify({
         error: "No autenticado",
-        mensaje: "El estudiante debe iniciar sesión para consultar silabos"
+        mensaje: "El estudiante debe iniciar sesión para consultar sílabos",
       });
     }
 
@@ -341,16 +365,19 @@ ESTILO DE RESPUESTA:
     const periodo = args.periodo;
 
     try {
-      // Primero obtener el período activo si no se especifica uno
+      // Obtener período activo si no se especifica
       let periodoActivo = periodo;
       if (!periodoActivo) {
-        const periodosResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/periodo-academico/`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${userContext.token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        const periodosResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/periodo-academico/`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${userContext.token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
 
         if (periodosResponse.ok) {
           const periodos = await periodosResponse.json();
@@ -359,69 +386,73 @@ ESTILO DE RESPUESTA:
         }
       }
 
-      // Buscar silabos de la materia
-      const silabosResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/silabo/`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${userContext.token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      // Buscar sílabos de la materia
+      const silabosResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/silabo/`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${userContext.token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!silabosResponse.ok) {
         throw new Error(`Error HTTP: ${silabosResponse.status}`);
       }
 
       const silabos = await silabosResponse.json();
-      
-      // Filtrar silabos de la materia específica
-      const silabosMateria = silabos.filter((silabo: any) => 
-        silabo.materia?.nombre?.toLowerCase().includes(materia.toLowerCase())
+
+      const silabosMateria = silabos.filter((silabo: any) =>
+        silabo.materia?.nombre
+          ?.toLowerCase()
+          .includes(materia.toLowerCase())
       );
 
       if (silabosMateria.length === 0) {
         return JSON.stringify({
-          error: "No se encontró silabo",
-          mensaje: `No se encontró silabo para la materia: ${materia}`,
-          materia: materia
+          error: "No se encontró sílabo",
+          mensaje: `No se encontró sílabo para la materia: ${materia}`,
+          materia,
         });
       }
 
-      // Tomar el primer silabo encontrado (o el del período específico)
-      const silabo = periodoActivo 
-        ? silabosMateria.find((s: any) => s.periodo === periodoActivo) || silabosMateria[0]
+      const silabo = periodoActivo
+        ? silabosMateria.find((s: any) => s.periodo === periodoActivo) ||
+          silabosMateria[0]
         : silabosMateria[0];
 
-      // Formatear la respuesta con temas y subtemas
       const resultado = {
         materia: silabo.materia?.nombre || materia,
         periodo: silabo.periodo_detalle?.codigo || "N/A",
         titulo: silabo.titulo,
         descripcion: silabo.descripcion,
-        temas: silabo.temas?.map((tema: any) => ({
-          id: tema.id,
-          titulo: tema.titulo,
-          descripcion: tema.descripcion,
-          semana: tema.semana,
-          orden: tema.orden,
-          subtemas: tema.subtemas?.map((subtema: any) => ({
-            id: subtema.id,
-            titulo: subtema.titulo,
-            descripcion: subtema.descripcion,
-            recursos: subtema.recursos,
-            orden: subtema.orden
-          })) || []
-        })) || [],
+        temas:
+          silabo.temas?.map((tema: any) => ({
+            id: tema.id,
+            titulo: tema.titulo,
+            descripcion: tema.descripcion,
+            semana: tema.semana,
+            orden: tema.orden,
+            subtemas:
+              tema.subtemas?.map((subtema: any) => ({
+                id: subtema.id,
+                titulo: subtema.titulo,
+                descripcion: subtema.descripcion,
+                recursos: subtema.recursos,
+                orden: subtema.orden,
+              })) || [],
+          })) || [],
         total_temas: silabo.temas?.length || 0,
-        mensaje: `Silabo encontrado para ${silabo.materia?.nombre}. Puedes elegir un tema específico para reforzar.`
+        mensaje: `Sílabo encontrado para ${silabo.materia?.nombre}. Puedes elegir un tema específico para reforzar.`,
       };
 
       return JSON.stringify(resultado);
-
     } catch (error: any) {
-      return JSON.stringify({ 
-        error: "Error al obtener silabo", 
-        mensaje: error.message 
+      return JSON.stringify({
+        error: "Error al obtener sílabo",
+        mensaje: error.message,
       });
     }
   }
@@ -433,152 +464,229 @@ ESTILO DE RESPUESTA:
     const tipoRecurso = args.tipo_recurso || "general";
     const urgencia = args.nivel_urgencia || "media";
 
-    // Generar recursos específicos para el tema/subtema
     const recursos = this.generarRecursosEducativos(
-      materia, 
-      tipoRecurso, 
-      urgencia, 
-      temaEspecifico, 
+      materia,
+      tipoRecurso,
+      urgencia,
+      temaEspecifico,
       subtemaEspecifico
     );
 
     return JSON.stringify({
-      materia: materia,
+      materia,
       tema_especifico: temaEspecifico || null,
       subtema_especifico: subtemaEspecifico || null,
       tipo_recurso: tipoRecurso,
-      urgencia: urgencia,
-      recursos: recursos
+      urgencia,
+      recursos,
+      mensaje_formateado: this.formatearRecursosParaGPT(recursos),
     });
   }
 
   private generarRecursosEducativos(
-    materia: string, 
-    tipo: string, 
-    urgencia: string, 
-    temaEspecifico?: string, 
+    materia: string,
+    tipo: string,
+    urgencia: string,
+    temaEspecifico?: string,
     subtemaEspecifico?: string
   ): any[] {
     const recursos: any[] = [];
 
-    // Crear términos de búsqueda específicos
+    // Construir término de búsqueda
     let terminoBusqueda = materia;
-    if (temaEspecifico) {
-      terminoBusqueda += ` ${temaEspecifico}`;
-    }
-    if (subtemaEspecifico) {
-      terminoBusqueda += ` ${subtemaEspecifico}`;
-    }
+    if (temaEspecifico) terminoBusqueda += ` ${temaEspecifico}`;
+    if (subtemaEspecifico) terminoBusqueda += ` ${subtemaEspecifico}`;
 
-    // YouTube - Búsqueda específica por tema
+    // YouTube
     recursos.push({
       plataforma: "YouTube",
       tipo: "Videos educativos",
-      enlaces: [
-        `https://www.youtube.com/results?search_query=${encodeURIComponent(terminoBusqueda + ' tutorial español')}`,
-        `https://www.youtube.com/results?search_query=${encodeURIComponent(terminoBusqueda + ' explicación paso a paso')}`,
-        temaEspecifico ? `https://www.youtube.com/results?search_query=${encodeURIComponent(temaEspecifico + ' ' + materia + ' explicación')}` : null
-      ].filter(Boolean),
-      descripcion: temaEspecifico 
+      descripcion: temaEspecifico
         ? `Videos específicos sobre ${temaEspecifico} en ${materia}`
-        : "Videos explicativos en español"
+        : "Videos explicativos en español",
+      enlaces: [
+        {
+          texto: "Tutorial en español",
+          url: `https://www.youtube.com/results?search_query=${encodeURIComponent(
+            terminoBusqueda + " tutorial español"
+          )}`,
+        },
+        {
+          texto: "Explicación paso a paso",
+          url: `https://www.youtube.com/results?search_query=${encodeURIComponent(
+            terminoBusqueda + " explicación paso a paso"
+          )}`,
+        },
+        ...(temaEspecifico
+          ? [
+              {
+                texto: `Explicación de ${temaEspecifico}`,
+                url: `https://www.youtube.com/results?search_query=${encodeURIComponent(
+                  temaEspecifico + " " + materia + " explicación"
+                )}`,
+              },
+            ]
+          : []),
+      ],
     });
 
-    // Khan Academy - Búsqueda específica
+    // Khan Academy
     recursos.push({
       plataforma: "Khan Academy",
       tipo: "Cursos interactivos",
-      enlace: `https://es.khanacademy.org/search?search_again=1&page_search_query=${encodeURIComponent(terminoBusqueda)}`,
-      descripcion: temaEspecifico 
+      descripcion: temaEspecifico
         ? `Cursos interactivos sobre ${temaEspecifico} en ${materia}`
-        : "Cursos gratuitos con ejercicios prácticos"
+        : "Cursos gratuitos con ejercicios prácticos",
+      enlace: {
+        texto: "Buscar en Khan Academy",
+        url: `https://es.khanacademy.org/search?search_again=1&page_search_query=${encodeURIComponent(
+          terminoBusqueda
+        )}`,
+      },
     });
 
-    // Coursera - Búsqueda específica
+    // Coursera
     recursos.push({
       plataforma: "Coursera",
       tipo: "Cursos universitarios",
-      enlace: `https://www.coursera.org/search?query=${encodeURIComponent(terminoBusqueda)}`,
-      descripcion: temaEspecifico 
+      descripcion: temaEspecifico
         ? `Cursos universitarios sobre ${temaEspecifico} en ${materia}`
-        : "Cursos de universidades reconocidas"
+        : "Cursos de universidades reconocidas",
+      enlace: {
+        texto: "Buscar en Coursera",
+        url: `https://www.coursera.org/search?query=${encodeURIComponent(
+          terminoBusqueda
+        )}`,
+      },
     });
 
-    // MIT OpenCourseWare - Búsqueda específica
+    // MIT OCW
     recursos.push({
       plataforma: "MIT OpenCourseWare",
       tipo: "Material académico avanzado",
-      enlace: `https://ocw.mit.edu/search/?q=${encodeURIComponent(terminoBusqueda)}`,
-      descripcion: temaEspecifico 
+      descripcion: temaEspecifico
         ? `Material del MIT sobre ${temaEspecifico} en ${materia}`
-        : "Recursos del MIT de acceso libre"
+        : "Recursos del MIT de acceso libre",
+      enlace: {
+        texto: "Buscar en MIT OCW",
+        url: `https://ocw.mit.edu/search/?q=${encodeURIComponent(
+          terminoBusqueda
+        )}`,
+      },
     });
 
-    // Ejercicios prácticos específicos
+    // Ejercicios prácticos
     if (tipo === "ejercicios" || urgencia === "alta") {
       recursos.push({
         plataforma: "Varios",
         tipo: "Ejercicios resueltos",
-        enlaces: [
-          `https://www.google.com/search?q=${encodeURIComponent(terminoBusqueda + ' ejercicios resueltos pdf')}`,
-          `https://www.google.com/search?q=${encodeURIComponent(terminoBusqueda + ' problemas resueltos paso a paso')}`,
-          temaEspecifico ? `https://www.google.com/search?q=${encodeURIComponent(temaEspecifico + ' ' + materia + ' ejercicios prácticos')}` : null
-        ].filter(Boolean),
-        descripcion: temaEspecifico 
+        descripcion: temaEspecifico
           ? `Ejercicios específicos sobre ${temaEspecifico} en ${materia}`
-          : "Problemas resueltos paso a paso"
+          : "Problemas resueltos paso a paso",
+        enlaces: [
+          {
+            texto: "Ejercicios resueltos PDF",
+            url: `https://www.google.com/search?q=${encodeURIComponent(
+              terminoBusqueda + " ejercicios resueltos pdf"
+            )}`,
+          },
+          {
+            texto: "Problemas paso a paso",
+            url: `https://www.google.com/search?q=${encodeURIComponent(
+              terminoBusqueda + " problemas resueltos paso a paso"
+            )}`,
+          },
+          ...(temaEspecifico
+            ? [
+                {
+                  texto: `Ejercicios de ${temaEspecifico}`,
+                  url: `https://www.google.com/search?q=${encodeURIComponent(
+                    temaEspecifico + " " + materia + " ejercicios prácticos"
+                  )}`,
+                },
+              ]
+            : []),
+        ],
       });
     }
 
-    // Recursos adicionales específicos para el tema
+    // Recursos extra con tema específico
     if (temaEspecifico) {
       recursos.push({
         plataforma: "Google Scholar",
         tipo: "Artículos académicos",
-        enlace: `https://scholar.google.com/scholar?q=${encodeURIComponent(terminoBusqueda)}`,
-        descripcion: `Artículos académicos sobre ${temaEspecifico} en ${materia}`
+        descripcion: `Artículos académicos sobre ${temaEspecifico} en ${materia}`,
+        enlace: {
+          texto: "Buscar en Google Scholar",
+          url: `https://scholar.google.com/scholar?q=${encodeURIComponent(
+            terminoBusqueda
+          )}`,
+        },
       });
 
       recursos.push({
         plataforma: "Stack Overflow",
         tipo: "Preguntas y respuestas técnicas",
-        enlace: `https://stackoverflow.com/search?q=${encodeURIComponent(terminoBusqueda)}`,
-        descripcion: `Preguntas técnicas sobre ${temaEspecifico} en ${materia}`
+        descripcion: `Preguntas técnicas sobre ${temaEspecifico} en ${materia}`,
+        enlace: {
+          texto: "Buscar en Stack Overflow",
+          url: `https://stackoverflow.com/search?q=${encodeURIComponent(
+            terminoBusqueda
+          )}`,
+        },
       });
     }
 
     return recursos;
   }
 
-  // ===== MÉTODO PRINCIPAL CON FUNCTION CALLING =====
+  private formatearRecursosParaGPT(recursos: any[]): string {
+    let texto = "\n📚 **RECURSOS EDUCATIVOS ENCONTRADOS**\n\n";
+    texto +=
+      "⚠️ IMPORTANTE: Usa el formato [LINK:url|Texto] para TODOS los enlaces.\n\n";
 
+    recursos.forEach((recurso, index) => {
+      texto += `${index + 1}. **${recurso.plataforma}**\n`;
+      texto += `   - ${recurso.descripcion}\n`;
+
+      if (Array.isArray(recurso.enlaces)) {
+        recurso.enlaces.forEach((enlace: any) => {
+          const label = enlace.texto || "Enlace";
+          texto += `   - ${label}: [LINK:${enlace.url}|${label}]\n`;
+        });
+      } else if (recurso.enlace) {
+        const label = recurso.enlace.texto || "Enlace";
+        texto += `   - ${label}: [LINK:${recurso.enlace.url}|${label}]\n`;
+      }
+      texto += "\n";
+    });
+
+    texto += "\n💡 **Instrucción para presentación:**\n";
+    texto +=
+      "Presenta estos recursos de forma amigable manteniendo EXACTAMENTE el formato [LINK:url|Texto].\n";
+
+    return texto;
+  }
+
+  // ===== LOOP PRINCIPAL =====
   async sendMessage(message: string, userContext?: UserContext): Promise<string> {
     if (this.useFallback || !this.openai) {
       return "El servicio de IA no está disponible. Configura la API Key de OpenAI.";
     }
 
     try {
-      // Inicializar historial si es necesario
       if (this.chatHistory.length === 0) {
         this.chatHistory = [
-          { 
-            role: "system", 
-            content: this.getSystemPrompt(userContext) 
-          }
+          { role: "system", content: this.getSystemPrompt(userContext) },
         ];
       }
 
-      // Agregar mensaje del usuario
-      this.chatHistory.push({ 
-        role: "user", 
-        content: message 
-      });
+      this.chatHistory.push({ role: "user", content: message });
 
-      let continueLoop = true;
       let iteraciones = 0;
       const MAX_ITERACIONES = 5;
 
-      while (continueLoop && iteraciones < MAX_ITERACIONES) {
+      while (iteraciones < MAX_ITERACIONES) {
         iteraciones++;
 
         const response = await this.openai.chat.completions.create({
@@ -587,100 +695,85 @@ ESTILO DE RESPUESTA:
           functions: this.getFunctionDefinitions(),
           function_call: "auto",
           temperature: 0.7,
-          max_tokens: 1500
+          max_tokens: 1500,
         });
 
         const choice = response.choices[0];
         const finishReason = choice.finish_reason;
 
-        // Si el modelo quiere llamar a una función
         if (finishReason === "function_call" && choice.message.function_call) {
           const functionName = choice.message.function_call.name;
-          const functionArgs = JSON.parse(choice.message.function_call.arguments);
+          const functionArgs = JSON.parse(
+            choice.message.function_call.arguments || "{}"
+          );
 
-          console.log(`🤖 OpenAI solicita función: ${functionName}`, functionArgs);
-
-          // Agregar la solicitud de función al historial
           this.chatHistory.push({
             role: "assistant",
             content: choice.message.content || "",
-            // @ts-ignore
-            function_call: choice.message.function_call
+            function_call: choice.message.function_call,
           });
 
-          // Ejecutar la función
           const functionResult = await this.ejecutarFuncion(
-            functionName, 
-            functionArgs, 
+            functionName,
+            functionArgs,
             userContext
           );
 
-          console.log(`✅ Resultado de función:`, functionResult);
-
-          // Agregar el resultado al historial
           this.chatHistory.push({
             role: "function",
             name: functionName,
-            content: functionResult
+            content: functionResult,
           });
 
-          // ⭐ AUTO-TRIGGER: Obtener silabo si se detecta materia crítica
-          const resultObj = JSON.parse(functionResult);
-          if (resultObj.necesita_recursos && resultObj.materia_critica) {
-            console.log(`🚨 Materia crítica detectada: ${resultObj.materia_critica}`);
-            
-            // Primero obtener el silabo para mostrar temas disponibles
-            const silaboResult = await this.ejecutarFuncion(
-              "obtener_silabo_materia",
-              {
-                materia: resultObj.materia_critica
-              },
-              userContext
-            );
-
-            this.chatHistory.push({
-              role: "function",
-              name: "obtener_silabo_materia",
-              content: silaboResult
-            });
+          // Auto-trigger: traer sílabo si hay materia crítica
+          try {
+            const resultObj = JSON.parse(functionResult);
+            if (resultObj?.necesita_recursos && resultObj?.materia_critica) {
+              const silaboResult = await this.ejecutarFuncion(
+                "obtener_silabo_materia",
+                { materia: resultObj.materia_critica },
+                userContext
+              );
+              this.chatHistory.push({
+                role: "function",
+                name: "obtener_silabo_materia",
+                content: silaboResult,
+              });
+            }
+          } catch {
+            // ignorar si no es JSON
           }
 
-          // Continuar el loop para que el modelo procese el resultado
-          continue;
-
+          continue; // vuelve a pedir a OpenAI que genere respuesta final
         } else {
-          // El modelo dio una respuesta final
-          const assistantResponse = choice.message.content || "No pude generar una respuesta.";
+          const assistantResponse =
+            choice.message.content || "No pude generar una respuesta.";
 
-          this.chatHistory.push({
-            role: "assistant",
-            content: assistantResponse
-          });
+          this.chatHistory.push({ role: "assistant", content: assistantResponse });
 
-          // Limpiar historial si es muy largo
+          // Mantener historial acotado
           if (this.chatHistory.length > 20) {
             const systemMessage = this.chatHistory[0];
-            const recentMessages = this.chatHistory.slice(-19);
-            this.chatHistory = [systemMessage, ...recentMessages];
+            const recent = this.chatHistory.slice(-19);
+            this.chatHistory = [systemMessage, ...recent];
           }
 
+          // ✅ Devolver respuesta sin convertir enlaces (MessageRenderer se encarga)
           return assistantResponse;
         }
       }
 
       return "Lo siento, tuve problemas procesando tu solicitud. ¿Podrías reformularla?";
-
     } catch (error: any) {
-      console.error('❌ Error en sendMessage:', error);
+      console.error("❌ Error en sendMessage:", error);
       return `Error: ${error.message}. Por favor intenta nuevamente.`;
     }
   }
 
-  // ===== MÉTODOS DE MULTIMEDIA (IMAGEN Y VOZ) =====
-
+  // ===== MULTIMEDIA =====
   async sendMessageWithImage(
-    message: string, 
-    imageFile: File, 
+    message: string,
+    imageFile: File,
     userContext?: UserContext
   ): Promise<string> {
     if (this.useFallback || !this.openai) {
@@ -689,43 +782,31 @@ ESTILO DE RESPUESTA:
 
     try {
       const base64Image = await this.fileToBase64(imageFile);
-      
+
       const response = await this.openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: [
-          {
-            role: "system",
-            content: this.getSystemPrompt(userContext)
-          },
+          { role: "system", content: this.getSystemPrompt(userContext) },
           {
             role: "user",
             content: [
               { type: "text", text: message || "Analiza esta imagen." },
-              {
-                type: "image_url",
-                image_url: { url: base64Image }
-              }
-            ] as any
-          }
+              { type: "image_url", image_url: { url: base64Image } },
+            ] as any,
+          },
         ],
-        max_tokens: 1000
+        max_tokens: 1000,
       });
 
-      const assistantResponse = response.choices[0]?.message?.content || "No pude analizar la imagen";
+      const assistantResponse =
+        response.choices[0]?.message?.content || "No pude analizar la imagen";
 
-      this.chatHistory.push({ 
-        role: "user", 
-        content: `[Imagen: ${message}]` 
-      });
-      this.chatHistory.push({ 
-        role: "assistant", 
-        content: assistantResponse 
-      });
+      this.chatHistory.push({ role: "user", content: `[Imagen: ${message}]` });
+      this.chatHistory.push({ role: "assistant", content: assistantResponse });
 
       return assistantResponse;
-
     } catch (error: any) {
-      console.error('❌ Error procesando imagen:', error);
+      console.error("❌ Error procesando imagen:", error);
       return "Error al procesar la imagen. Verifica que el archivo sea válido.";
     }
   }
@@ -735,21 +816,17 @@ ESTILO DE RESPUESTA:
     userContext?: UserContext
   ): Promise<string> {
     try {
-      console.log('🎙️ Transcribiendo audio...');
-      
+      console.log("🎙️ Transcribiendo audio...");
       const transcription = await this.transcribeAudio(audioFile);
-      
+
       if (!transcription || transcription.trim().length < 3) {
         return "No pude entender el audio. Habla más claro e intenta nuevamente.";
       }
 
-      console.log('✅ Transcripción:', transcription);
-
-      // Procesar como mensaje normal
+      console.log("✅ Transcripción:", transcription);
       return await this.sendMessage(transcription, userContext);
-      
     } catch (error: any) {
-      console.error('❌ Error procesando audio:', error);
+      console.error("❌ Error procesando el audio:", error);
       return "Error procesando el audio. Intenta nuevamente.";
     }
   }
@@ -757,27 +834,29 @@ ESTILO DE RESPUESTA:
   private async transcribeAudio(audioFile: File): Promise<string> {
     try {
       const formData = new FormData();
-      formData.append('file', audioFile);
-      formData.append('model', 'whisper-1');
-      formData.append('language', 'es');
+      formData.append("file", audioFile);
+      formData.append("model", "whisper-1");
+      formData.append("language", "es");
 
-      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
-        },
-        body: formData
-      });
+      const response = await fetch(
+        "https://api.openai.com/v1/audio/transcriptions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_OPENAI_API_KEY}`,
+          },
+          body: formData,
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Error en transcripción: ${response.status}`);
       }
 
       const data = await response.json();
-      return data.text || '';
-
+      return data.text || "";
     } catch (error) {
-      console.error('Error en Whisper:', error);
+      console.error("Error en Whisper:", error);
       throw error;
     }
   }
@@ -791,8 +870,7 @@ ESTILO DE RESPUESTA:
     });
   }
 
-  // ===== MÉTODOS AUXILIARES =====
-
+  // ===== AUXILIARES =====
   resetChat(): void {
     this.chatHistory = [];
   }
@@ -801,13 +879,13 @@ ESTILO DE RESPUESTA:
     return this.chatHistory;
   }
 
-  getServiceStatus(): { 
-    available: boolean; 
-    mode: 'openai' | 'fallback'; 
+  getServiceStatus(): {
+    available: boolean;
+    mode: "openai" | "fallback";
   } {
     return {
       available: !this.useFallback,
-      mode: this.useFallback ? 'fallback' : 'openai'
+      mode: this.useFallback ? "fallback" : "openai",
     };
   }
 }
